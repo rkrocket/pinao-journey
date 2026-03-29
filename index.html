@@ -290,7 +290,7 @@ function App(){
   const[em,setEm]=useState(false);const[ns,setNs]=useState({reading:"",technique:"",theory:""});const[es,setEs]=useState(null);
   const[fbReady,setFbReady]=useState(false);const[syncStatus,setSyncStatus]=useState("connecting");
   const skipNextSync=useRef(false);
-  const[fbUser,setFbUser]=useState(null);
+  const[fbUser,setFbUser]=useState(null);const[offlineMode,setOfflineMode]=useState(false);
   const t=TH[theme];
 
   // Firebase auth listener
@@ -326,23 +326,10 @@ function App(){
   const signIn=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>alert("Sign-in failed: "+e.message));
   const signOut=()=>auth.signOut().then(()=>{fbUid=null;setFbUser(null);setSyncStatus("signed-out")});
 
-  // Show sign-in screen if not authenticated
-  if(!fbUser){
-    return h("div",{style:{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
-      h("div",{className:"si",style:{background:t.cb,borderRadius:16,padding:40,maxWidth:400,width:"100%",textAlign:"center",boxShadow:t.sh}},
-        h("div",{style:{fontFamily:FD,fontSize:28,fontWeight:700,fontStyle:"italic",color:t.tx,marginBottom:8}},"♪ Piano Journey"),
-        h("div",{style:{fontSize:14,color:t.ts,marginBottom:32}},"Sign in to sync your progress across all devices."),
-        h("button",{onClick:signIn,style:{padding:"14px 32px",borderRadius:10,border:"none",background:t.ac,color:"#fff",cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:FB,display:"flex",alignItems:"center",justifyContent:"center",gap:10,margin:"0 auto",width:"100%"}},"Sign in with Google"),
-        h("div",{style:{fontSize:11,color:t.tm,marginTop:20}},"Your data is private and only accessible to you."),
-        h("div",{style:{marginTop:24}},
-          h("button",{onClick:()=>setTheme(th=>th==="light"?"dark":"light"),style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"6px 12px",color:t.ts,cursor:"pointer",fontSize:11}},theme==="light"?"🌙 Dark mode":"☀ Light mode"))))
-  }
-
   // Save to both localStorage and Firebase when data changes
   const saveTimeout=useRef(null);
   useEffect(()=>{
     localStorage.setItem("pj",JSON.stringify(data));
-    // Debounce Firebase writes to avoid excessive writes
     if(saveTimeout.current)clearTimeout(saveTimeout.current);
     saveTimeout.current=setTimeout(()=>{
       const ref=getDocRef();
@@ -365,6 +352,19 @@ function App(){
   const importD=text=>{try{const d=JSON.parse(text);if(d.generalRoadmap&&d.songs!==undefined){setData(d);alert("Imported!")}else alert("Invalid")}catch{alert("Error")}};
   const resetD=()=>{if(confirm("Reset all?")){setData(DD);setSel(null)}};
   const SM=showSet&&h(SettingsModal,{t,apiKey,setApiKey,onExport:exportD,onImport:importD,onReset:resetD,onClose:()=>setShowSet(false),fbUser,onSignOut:signOut});
+
+  // Show sign-in screen if not authenticated and not in offline mode
+  if(!fbUser&&!offlineMode){
+    return h("div",{style:{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+      h("div",{className:"si",style:{background:t.cb,borderRadius:16,padding:40,maxWidth:400,width:"100%",textAlign:"center",boxShadow:t.sh}},
+        h("div",{style:{fontFamily:FD,fontSize:28,fontWeight:700,fontStyle:"italic",color:t.tx,marginBottom:8}},"♪ Piano Journey"),
+        h("div",{style:{fontSize:14,color:t.ts,marginBottom:32}},"Sign in to sync your progress across all devices."),
+        h("button",{onClick:signIn,style:{padding:"14px 32px",borderRadius:10,border:"none",background:t.ac,color:"#fff",cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:FB,display:"flex",alignItems:"center",justifyContent:"center",gap:10,margin:"0 auto",width:"100%"}},"Sign in with Google"),
+        h("button",{onClick:()=>{setOfflineMode(true);setSyncStatus("offline")},style:{padding:"12px 32px",borderRadius:10,border:`1px solid ${t.cbd}`,background:"transparent",color:t.ts,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:FB,margin:"12px auto 0",width:"100%"}},"Continue without sign-in (local only)"),
+        h("div",{style:{fontSize:11,color:t.tm,marginTop:20}},"Your data is private and only accessible to you."),
+        h("div",{style:{marginTop:24}},
+          h("button",{onClick:()=>setTheme(th=>th==="light"?"dark":"light"),style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"6px 12px",color:t.ts,cursor:"pointer",fontSize:11}},theme==="light"?"🌙 Dark mode":"☀ Light mode"))))
+  }
 
   if(sel?.type==="song"){const song=data.songs.find(s=>s.id===sel.id);if(!song){setSel(null);return null}return h("div",{style:{minHeight:"100vh",background:t.bg}},h(TopBar,{theme,toggleTheme:toggle,t,onSettings:()=>setShowSet(true),syncStatus}),h(SongDetail,{song,t,apiKey,onUpdate:(f,v)=>upSong(song.id,f,v),onDelete:()=>delSong(song.id),onBack:()=>setSel(null)}),SM)}
 
