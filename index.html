@@ -104,7 +104,7 @@ function TA({value,onChange,placeholder,rows=4,t,style:s={}}){
 function SPills({current,onChange,t,small}){return h("div",{style:{display:"flex",gap:small?4:6,flexWrap:"wrap"}},ST.map(s=>h("button",{key:s,onClick:()=>onChange(s),style:{padding:small?"5px 10px":"7px 14px",borderRadius:12,fontSize:small?10:11,cursor:"pointer",border:current===s?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:current===s?t.ac:t.cb,color:current===s?"#fff":t.ts,fontWeight:600,minHeight:small?28:32}},s)))}
 function PBar({percent,t,height=6,color}){return h("div",{style:{height,borderRadius:height/2,background:t.trk,overflow:"hidden",flex:1}},h("div",{style:{height:"100%",borderRadius:height/2,background:color||(percent>=80?t.ac:t.go),width:`${percent}%`,transition:"width .5s"}}))}
 function PRing({percent,size=64,stroke=6,color,trackColor}){const r=(size-stroke)/2,c=2*Math.PI*r;return h("svg",{width:size,height:size,style:{transform:"rotate(-90deg)",flexShrink:0}},h("circle",{cx:size/2,cy:size/2,r,fill:"none",stroke:trackColor,strokeWidth:stroke}),h("circle",{cx:size/2,cy:size/2,r,fill:"none",stroke:color,strokeWidth:stroke,strokeDasharray:c,strokeDashoffset:c-(percent/100)*c,strokeLinecap:"round",style:{transition:"stroke-dashoffset .8s"}}))}
-function TopBar({theme,toggleTheme,t,onSettings,syncStatus}){const syncIcons={synced:"☁️",connecting:"⏳",offline:"⚠️"};const syncLabels={synced:"Synced",connecting:"Connecting...",offline:"Offline"};
+function TopBar({theme,toggleTheme,t,onSettings,syncStatus}){const syncIcons={synced:"☁️",connecting:"⏳",offline:"⚠️","signed-out":"🔒"};const syncLabels={synced:"Synced",connecting:"Connecting...",offline:"Offline","signed-out":"Signed out"};
   return h("div",{style:{height:56,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",background:t.tb,borderBottom:`1px solid ${t.tbd}`,position:"sticky",top:0,zIndex:100}},h("span",{style:{fontFamily:FD,fontSize:20,fontWeight:700,fontStyle:"italic",color:t.tx}},"♪ Piano Journey"),h("div",{style:{display:"flex",gap:8,alignItems:"center"}},syncStatus&&h("span",{title:syncLabels[syncStatus]||"",style:{fontSize:12,color:syncStatus==="synced"?t.ac:syncStatus==="offline"?t.dt:t.tm,cursor:"default"}},syncIcons[syncStatus]||""),h("button",{onClick:onSettings,style:{padding:"6px 12px",borderRadius:6,border:`1px solid ${t.cbd}`,background:t.cb,color:t.ts,cursor:"pointer",fontSize:11,fontWeight:600}},"⚙"),h("button",{onClick:toggleTheme,style:{width:38,height:38,borderRadius:"50%",border:`2px solid ${t.ac}`,background:"transparent",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:t.ac}},theme==="light"?"☀":"☾")))}
 function SkillTags({tags,t,onRemove}){if(!tags?.length)return null;return h("div",{style:{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}},tags.map((tag,i)=>h("span",{key:i,style:{fontSize:10,padding:"2px 8px",borderRadius:10,background:t.al,color:t.ac,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}},tag,onRemove&&h("button",{onClick:e=>{e.stopPropagation();onRemove(i)},style:{background:"none",border:"none",color:t.ac,cursor:"pointer",fontSize:12,padding:0,lineHeight:1}},"×"))))}
 function AIBtn({onClick,loading,label,t}){return h("button",{onClick,disabled:loading,style:{padding:"6px 12px",borderRadius:6,border:`1px solid ${t.ac}`,background:t.al,color:t.ac,cursor:loading?"not-allowed":"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}},loading?h("span",null,h("span",{className:"pulse"},"🤖")," Loading..."):h("span",null,"🤖 ",label))}
@@ -178,7 +178,7 @@ function SecAcc({section,isOpen,onToggle,onUpdate,onDelete,onMove,canUp,canDown,
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},h("button",{onClick:onDelete,style:{background:"none",border:"none",color:t.dt,cursor:"pointer",fontSize:11,padding:4}},"Remove"),h("div",{style:{display:"flex",gap:6}},h("button",{onClick:()=>onMove(-1),disabled:!canUp,style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"2px 10px",cursor:canUp?"pointer":"default",color:canUp?t.ac:t.tm,fontSize:11}},"↑"),h("button",{onClick:()=>onMove(1),disabled:!canDown,style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"2px 10px",cursor:canDown?"pointer":"default",color:canDown?t.ac:t.tm,fontSize:11}},"↓")))))}
 
 // ─── Settings Modal ───
-function SettingsModal({t,apiKey,setApiKey,onExport,onImport,onReset,onClose}){
+function SettingsModal({t,apiKey,setApiKey,onExport,onImport,onReset,onClose,fbUser,onSignOut}){
   const fr=useRef(null);
   return h("div",{style:{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16},onClick:e=>{if(e.target===e.currentTarget)onClose()}},
     h("div",{className:"si wm",style:{background:t.cb,borderRadius:16,padding:28,maxWidth:480,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.25)",maxHeight:"90vh",overflow:"auto"}},
@@ -190,6 +190,9 @@ function SettingsModal({t,apiKey,setApiKey,onExport,onImport,onReset,onClose}){
           h("button",{onClick:()=>fr.current?.click(),style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.cbd}`,background:"transparent",color:t.ts,cursor:"pointer",fontSize:12,fontWeight:600}},"📤 Import"),
           h("input",{ref:fr,type:"file",accept:".json",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>onImport(ev.target.result);r.readAsText(f)}}}),
           h("button",{onClick:onReset,style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.dt}`,background:"transparent",color:t.dt,cursor:"pointer",fontSize:12,fontWeight:600}},"Reset"))),
+      fbUser&&h("div",{style:{borderTop:`1px solid ${t.dv}`,paddingTop:20,marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Account"),
+        h("div",{style:{fontSize:13,color:t.ts,marginBottom:8}},fbUser.email||"Signed in"),
+        h("button",{onClick:onSignOut,style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.cbd}`,background:"transparent",color:t.ts,cursor:"pointer",fontSize:12,fontWeight:600}},"Sign Out")),
       h("div",{style:{marginTop:20,display:"flex",justifyContent:"flex-end"}},h("button",{onClick:onClose,style:{padding:"10px 24px",borderRadius:8,border:"none",background:t.ac,color:"#fff",cursor:"pointer",fontSize:13,fontWeight:700}},"Done"))))}
 
 // Sheet reading status options
@@ -287,34 +290,53 @@ function App(){
   const[em,setEm]=useState(false);const[ns,setNs]=useState({reading:"",technique:"",theory:""});const[es,setEs]=useState(null);
   const[fbReady,setFbReady]=useState(false);const[syncStatus,setSyncStatus]=useState("connecting");
   const skipNextSync=useRef(false);
+  const[fbUser,setFbUser]=useState(null);
   const t=TH[theme];
 
-  // Firebase auth + real-time listener
+  // Firebase auth listener
   useEffect(()=>{
-    auth.signInAnonymously().then(cred=>{
-      fbUid=cred.user.uid;
-      setFbReady(true);setSyncStatus("synced");
-      // Load from Firebase first, fall back to local
-      const ref=getDocRef();
-      if(ref){
-        ref.get().then(doc=>{
-          if(doc.exists){
-            try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData));setSyncStatus("synced")}catch{}
-          }else{
-            // First time: push local data to Firebase
-            ref.set({data:JSON.stringify(data),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});setSyncStatus("synced");
-          }
-        }).catch(()=>setSyncStatus("offline"));
-        // Real-time listener for cross-device sync
-        ref.onSnapshot(doc=>{
-          if(doc.exists&&!skipNextSync.current){
-            try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData))}catch{}
-          }
-          skipNextSync.current=false;
-        },()=>setSyncStatus("offline"));
+    const unsub=auth.onAuthStateChanged(user=>{
+      if(user){
+        fbUid=user.uid;setFbUser(user);setFbReady(true);
+        // Load from Firebase
+        const ref=getDocRef();
+        if(ref){
+          ref.get().then(doc=>{
+            if(doc.exists){
+              try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData));setSyncStatus("synced")}catch{setSyncStatus("synced")}
+            }else{
+              ref.set({data:JSON.stringify(data),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});setSyncStatus("synced");
+            }
+          }).catch(()=>setSyncStatus("offline"));
+          // Real-time listener
+          ref.onSnapshot(doc=>{
+            if(doc.exists&&!skipNextSync.current){
+              try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData))}catch{}
+            }
+            skipNextSync.current=false;
+          },()=>setSyncStatus("offline"));
+        }
+      }else{
+        fbUid=null;setFbUser(null);setFbReady(false);setSyncStatus("signed-out");
       }
-    }).catch(()=>{setSyncStatus("offline");setFbReady(false)});
+    });
+    return ()=>unsub();
   },[]);
+
+  const signIn=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>alert("Sign-in failed: "+e.message));
+  const signOut=()=>auth.signOut().then(()=>{fbUid=null;setFbUser(null);setSyncStatus("signed-out")});
+
+  // Show sign-in screen if not authenticated
+  if(!fbUser){
+    return h("div",{style:{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+      h("div",{className:"si",style:{background:t.cb,borderRadius:16,padding:40,maxWidth:400,width:"100%",textAlign:"center",boxShadow:t.sh}},
+        h("div",{style:{fontFamily:FD,fontSize:28,fontWeight:700,fontStyle:"italic",color:t.tx,marginBottom:8}},"♪ Piano Journey"),
+        h("div",{style:{fontSize:14,color:t.ts,marginBottom:32}},"Sign in to sync your progress across all devices."),
+        h("button",{onClick:signIn,style:{padding:"14px 32px",borderRadius:10,border:"none",background:t.ac,color:"#fff",cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:FB,display:"flex",alignItems:"center",justifyContent:"center",gap:10,margin:"0 auto",width:"100%"}},"Sign in with Google"),
+        h("div",{style:{fontSize:11,color:t.tm,marginTop:20}},"Your data is private and only accessible to you."),
+        h("div",{style:{marginTop:24}},
+          h("button",{onClick:()=>setTheme(th=>th==="light"?"dark":"light"),style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"6px 12px",color:t.ts,cursor:"pointer",fontSize:11}},theme==="light"?"🌙 Dark mode":"☀ Light mode"))))
+  }
 
   // Save to both localStorage and Firebase when data changes
   const saveTimeout=useRef(null);
@@ -342,7 +364,7 @@ function App(){
   const exportD=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download="piano-journey.json";a.click()};
   const importD=text=>{try{const d=JSON.parse(text);if(d.generalRoadmap&&d.songs!==undefined){setData(d);alert("Imported!")}else alert("Invalid")}catch{alert("Error")}};
   const resetD=()=>{if(confirm("Reset all?")){setData(DD);setSel(null)}};
-  const SM=showSet&&h(SettingsModal,{t,apiKey,setApiKey,onExport:exportD,onImport:importD,onReset:resetD,onClose:()=>setShowSet(false)});
+  const SM=showSet&&h(SettingsModal,{t,apiKey,setApiKey,onExport:exportD,onImport:importD,onReset:resetD,onClose:()=>setShowSet(false),fbUser,onSignOut:signOut});
 
   if(sel?.type==="song"){const song=data.songs.find(s=>s.id===sel.id);if(!song){setSel(null);return null}return h("div",{style:{minHeight:"100vh",background:t.bg}},h(TopBar,{theme,toggleTheme:toggle,t,onSettings:()=>setShowSet(true),syncStatus}),h(SongDetail,{song,t,apiKey,onUpdate:(f,v)=>upSong(song.id,f,v),onDelete:()=>delSong(song.id),onBack:()=>setSel(null)}),SM)}
 
