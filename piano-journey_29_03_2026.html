@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piano Journey</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',sans-serif}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.fi{animation:fadeIn .3s ease both}.su{animation:slideUp .35s ease both}.si{animation:scaleIn .25s ease both}
+.pulse{animation:pulse 1.5s ease-in-out infinite}
+.ps{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}.ps::-webkit-scrollbar{display:none}
+button{font-family:inherit}
+@media(max-width:640px){
+.dg{grid-template-columns:1fr!important}
+.lh,.lr{grid-template-columns:1fr 1fr!important}
+.lr>:nth-child(2),.lr>:nth-child(3),.lh>:nth-child(2),.lh>:nth-child(3){display:none!important}
+.sfr{flex-direction:column!important}.si-full{width:100%!important}
+.wm{padding:20px!important;max-width:100%!important}
+.tb button{font-size:11px!important;padding:8px 4px!important}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useCallback,useMemo,useRef}=React;
+const h=React.createElement;
+const FD="'Playfair Display',Georgia,serif",FB="'DM Sans',sans-serif";
+const ST=["Not Started","Learning","Practicing","Mastered"];
+const SW={"Not Started":0,"Learning":.33,"Practicing":.66,"Mastered":1};
+
+const TH={
+light:{bg:"#FAF6F1",cb:"#FFFFFF",cbd:"#D6CEBC",bb:"#F5F1EB",tb:"#FFFFFF",tbd:"#E8E0D6",tx:"#3D3229",ts:"#888",tm:"#BBB",ac:"#7A8B6F",al:"#F0EBE1",go:"#C4A35A",gl:"#F0EBE1",trk:"#E8E0D6",ra:"#FDFBF8",pb:"#FFF",pbd:"#D6CEBC",pab:"#7A8B6F",pat:"#FFF",ma:"#E8F5E0",mat:"#5A7A4F",sh:"0 1px 4px rgba(61,50,41,.06)",shh:"0 4px 16px rgba(61,50,41,.1)",dv:"#F0EBE1",fl:"#CCBBAA",ib:"#FFF",ta:"#FFF",tab:"#F5F1EB",dt:"#C47A7A"},
+dark:{bg:"#1E1B18",cb:"#2A2520",cbd:"#3A3530",bb:"#332E28",tb:"#2A2520",tbd:"#3A3530",tx:"#EDE8E0",ts:"#999888",tm:"#666655",ac:"#96A88A",al:"#3D3630",go:"#D4B96A",gl:"#3D3630",trk:"#4A4238",ra:"#2E2924",pb:"#332E28",pbd:"#4A4238",pab:"#96A88A",pat:"#1E1B18",ma:"#2A3528",mat:"#96A88A",sh:"0 1px 4px rgba(0,0,0,.2)",shh:"0 4px 16px rgba(0,0,0,.3)",dv:"#3A3530",fl:"#5A5245",ib:"#332E28",ta:"#2A2520",tab:"#262220",dt:"#C47A7A"}};
+
+function gc(s,t){if(s==="Mastered")return{b:t.ma,t:t.mat};if(s==="Practicing")return{b:t.al,t:t.ac};if(s==="Learning")return{b:t.gl,t:t.go};return{b:t.al,t:t.tm}}
+function cp(items){if(!items?.length)return 0;return Math.round((items.reduce((s,i)=>s+(SW[i.stage]||0),0)/items.length)*100)}
+function sp(song){return song.sections?.length?cp(song.sections):(SW[song.stage]?Math.round(SW[song.stage]*100):0)}
+function sst(song){if(!song.sections?.length)return song.stage;const p=sp(song);if(p===100)return"Mastered";if(p>=50)return"Practicing";if(p>0)return"Learning";return"Not Started"}
+
+const LP={Intermediate:{reading:[{name:"Eighth notes and syncopation"},{name:"Ledger lines"},{name:"Key signatures up to 4 sharps/flats"},{name:"Sight-reading simple pieces"},{name:"Reading chord symbols"},{name:"Dotted rhythms and ties"}],technique:[{name:"All major scales hands together"},{name:"Minor scales (natural, harmonic)"},{name:"Arpeggios in multiple keys"},{name:"Pedal technique"},{name:"Playing at different tempos"},{name:"Hand crossing"}],theory:[{name:"Minor chords and progressions"},{name:"Common progressions (I-IV-V-I)"},{name:"Basic form analysis (ABA, rondo)"},{name:"Relative major/minor keys"},{name:"Circle of fifths basics"}]},Master:{reading:[{name:"Complex rhythms (triplets, dotted)"},{name:"Reading multiple voices"},{name:"Sight-reading intermediate pieces"},{name:"Ornaments (trills, turns, mordents)"},{name:"Score analysis"}],technique:[{name:"Scales in thirds and sixths"},{name:"Advanced pedaling"},{name:"Octave technique"},{name:"Voicing melody within chords"},{name:"Playing with rubato and expression"}],theory:[{name:"Seventh chords and extensions"},{name:"Modulation between keys"},{name:"Counterpoint basics"},{name:"Harmonic analysis of pieces"},{name:"Musical periods and style differences"}]}};
+
+const DD={generalRoadmap:{level:"Beginner",skills:{
+reading:{items:[{id:"r1",name:"Treble clef note names",stage:"Not Started"},{id:"r2",name:"Bass clef note names",stage:"Not Started"},{id:"r3",name:"Basic rhythms (whole, half, quarter)",stage:"Not Started"},{id:"r4",name:"Time signatures (4/4, 3/4)",stage:"Not Started"},{id:"r5",name:"Rests and dotted notes",stage:"Not Started"},{id:"r6",name:"Dynamic markings (p, f, mf)",stage:"Not Started"},{id:"r7",name:"Key signatures (up to 2 sharps/flats)",stage:"Not Started"},{id:"r8",name:"Reading hands together slowly",stage:"Not Started"}]},
+technique:{items:[{id:"t1",name:"Proper hand posture",stage:"Not Started"},{id:"t2",name:"C major scale (hands separate)",stage:"Not Started"},{id:"t3",name:"G major scale (hands separate)",stage:"Not Started"},{id:"t4",name:"Basic finger independence exercises",stage:"Not Started"},{id:"t5",name:"Simple hand coordination",stage:"Not Started"},{id:"t6",name:"C major arpeggio",stage:"Not Started"},{id:"t7",name:"Dynamics control (soft vs loud)",stage:"Not Started"},{id:"t8",name:"Legato and staccato touch",stage:"Not Started"}]},
+theory:{items:[{id:"th1",name:"Note names on the keyboard",stage:"Not Started"},{id:"th2",name:"Major vs minor (sound difference)",stage:"Not Started"},{id:"th3",name:"Basic major chords (C, G, F)",stage:"Not Started"},{id:"th4",name:"What a key signature tells you",stage:"Not Started"},{id:"th5",name:"Recognizing repeated sections",stage:"Not Started"},{id:"th6",name:"Intervals (2nds, 3rds, 5ths)",stage:"Not Started"}]}}},songs:[]};
+
+// Firebase
+const fbApp=firebase.initializeApp({apiKey:"AIzaSyCZb2xXje8R-L5lQKrqUjHu1vklk-2yQY4",authDomain:"piano-journey.firebaseapp.com",projectId:"piano-journey",storageBucket:"piano-journey.firebasestorage.app",messagingSenderId:"715389182779",appId:"1:715389182779:web:914a40c0f7aa6acad00d1e"});
+const db=firebase.firestore();
+const auth=firebase.auth();
+let fbUid=null;
+
+function getDocRef(){return fbUid?db.collection("users").doc(fbUid):null}
+// Storage with Firebase sync + localStorage cache
+function ld(){try{return JSON.parse(localStorage.getItem("pj"))}catch{return null}}
+function sv(d){
+  localStorage.setItem("pj",JSON.stringify(d));
+  const ref=getDocRef();if(ref)ref.set({data:JSON.stringify(d),updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(e=>console.error("Firebase save:",e));
+}
+function lk(){return localStorage.getItem("pj-key")||""}
+function skv(k){localStorage.setItem("pj-key",k)}
+
+// AI with queue
+const aiQueue=[];let aiRunning=false;
+function enqueueAI(fn){return new Promise((resolve,reject)=>{aiQueue.push({fn,resolve,reject});processQueue()})}
+async function processQueue(){if(aiRunning||!aiQueue.length)return;aiRunning=true;const{fn,resolve,reject}=aiQueue.shift();try{const r=await fn();resolve(r)}catch(e){reject(e)}await new Promise(r=>setTimeout(r,2500));aiRunning=false;processQueue()}
+async function ai(key,prompt,search=false,attempt=0,chain="default"){
+  if(!key)throw new Error("No API key. Go to Settings (⚙).");
+  const chains={default:["claude-sonnet-4-20250514","claude-sonnet-4-20250514","claude-haiku-4-5-20251001","claude-haiku-4-5-20251001"],
+    sheet:["claude-sonnet-4-20250514","claude-sonnet-4-20250514","claude-opus-4-20250514","claude-haiku-4-5-20251001"]};
+  const models=chains[chain]||chains.default;
+  const model=models[Math.min(attempt,models.length-1)];
+  const headers={"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"};
+  const body={model,max_tokens:1500,messages:[{role:"user",content:prompt}]};
+  if(search)body.tools=[{type:"web_search_20250305",name:"web_search"}];
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers,body:JSON.stringify(body)});
+  if((r.status===429||r.status===529)&&attempt<3){
+    const wait=(attempt+1)*3000;
+    await new Promise(res=>setTimeout(res,wait));
+    return ai(key,prompt,search,attempt+1,chain)}
+  if(!r.ok){const e=await r.text();throw new Error(`API ${r.status}: ${e.substring(0,100)}`)}
+  const data=await r.json();if(data.error)throw new Error(data.error.message);
+  return(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n")}
+function pJ(text){const c=text.replace(/```json\s?|```/g,"").trim();try{return JSON.parse(c)}catch{const m=c.match(/\[[\s\S]*?\]|{[\s\S]*?}/);if(m)try{return JSON.parse(m[0])}catch{};return null}}
+
+// ─── UI ───
+function Inp({value,onChange,placeholder,t,style:s={},...rest}){
+  return h("input",{value,onChange:e=>onChange(e.target.value),placeholder,...rest,style:{padding:"10px 12px",borderRadius:8,border:`1px solid ${t.cbd}`,background:t.ib,color:t.tx,fontSize:14,fontFamily:FB,outline:"none",boxSizing:"border-box",...s}})}
+function TA({value,onChange,placeholder,rows=4,t,style:s={}}){
+  return h("textarea",{value,onChange:e=>onChange(e.target.value),placeholder,rows,style:{width:"100%",padding:"10px 12px",borderRadius:8,border:`1px solid ${t.cbd}`,background:t.ib,color:t.tx,fontSize:13,fontFamily:FB,outline:"none",boxSizing:"border-box",resize:"vertical",...s}})}
+function SPills({current,onChange,t,small}){return h("div",{style:{display:"flex",gap:small?4:6,flexWrap:"wrap"}},ST.map(s=>h("button",{key:s,onClick:()=>onChange(s),style:{padding:small?"5px 10px":"7px 14px",borderRadius:12,fontSize:small?10:11,cursor:"pointer",border:current===s?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:current===s?t.ac:t.cb,color:current===s?"#fff":t.ts,fontWeight:600,minHeight:small?28:32}},s)))}
+function PBar({percent,t,height=6,color}){return h("div",{style:{height,borderRadius:height/2,background:t.trk,overflow:"hidden",flex:1}},h("div",{style:{height:"100%",borderRadius:height/2,background:color||(percent>=80?t.ac:t.go),width:`${percent}%`,transition:"width .5s"}}))}
+function PRing({percent,size=64,stroke=6,color,trackColor}){const r=(size-stroke)/2,c=2*Math.PI*r;return h("svg",{width:size,height:size,style:{transform:"rotate(-90deg)",flexShrink:0}},h("circle",{cx:size/2,cy:size/2,r,fill:"none",stroke:trackColor,strokeWidth:stroke}),h("circle",{cx:size/2,cy:size/2,r,fill:"none",stroke:color,strokeWidth:stroke,strokeDasharray:c,strokeDashoffset:c-(percent/100)*c,strokeLinecap:"round",style:{transition:"stroke-dashoffset .8s"}}))}
+function TopBar({theme,toggleTheme,t,onSettings,syncStatus}){const syncIcons={synced:"☁️",connecting:"⏳",offline:"⚠️"};const syncLabels={synced:"Synced",connecting:"Connecting...",offline:"Offline"};
+  return h("div",{style:{height:56,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",background:t.tb,borderBottom:`1px solid ${t.tbd}`,position:"sticky",top:0,zIndex:100}},h("span",{style:{fontFamily:FD,fontSize:20,fontWeight:700,fontStyle:"italic",color:t.tx}},"♪ Piano Journey"),h("div",{style:{display:"flex",gap:8,alignItems:"center"}},syncStatus&&h("span",{title:syncLabels[syncStatus]||"",style:{fontSize:12,color:syncStatus==="synced"?t.ac:syncStatus==="offline"?t.dt:t.tm,cursor:"default"}},syncIcons[syncStatus]||""),h("button",{onClick:onSettings,style:{padding:"6px 12px",borderRadius:6,border:`1px solid ${t.cbd}`,background:t.cb,color:t.ts,cursor:"pointer",fontSize:11,fontWeight:600}},"⚙"),h("button",{onClick:toggleTheme,style:{width:38,height:38,borderRadius:"50%",border:`2px solid ${t.ac}`,background:"transparent",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:t.ac}},theme==="light"?"☀":"☾")))}
+function SkillTags({tags,t,onRemove}){if(!tags?.length)return null;return h("div",{style:{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}},tags.map((tag,i)=>h("span",{key:i,style:{fontSize:10,padding:"2px 8px",borderRadius:10,background:t.al,color:t.ac,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}},tag,onRemove&&h("button",{onClick:e=>{e.stopPropagation();onRemove(i)},style:{background:"none",border:"none",color:t.ac,cursor:"pointer",fontSize:12,padding:0,lineHeight:1}},"×"))))}
+function AIBtn({onClick,loading,label,t}){return h("button",{onClick,disabled:loading,style:{padding:"6px 12px",borderRadius:6,border:`1px solid ${t.ac}`,background:t.al,color:t.ac,cursor:loading?"not-allowed":"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}},loading?h("span",null,h("span",{className:"pulse"},"🤖")," Loading..."):h("span",null,"🤖 ",label))}
+
+// ─── Suggestions Panel ───
+function SugPanel({type,song,allData,t,apiKey,onSave}){
+  const[exp,setExp]=useState(false);const[loading,setLoading]=useState(false);
+  const sugg=type==="song"?song?.suggestions:allData?.generalRoadmap?.suggestions;
+  const has=sugg?.items?.length>0;const icons={"YouTube":"▶","Article":"📄","Exercise":"🎯"};
+  const analyze=async()=>{if(!apiKey){onSave({lastAnalyzed:new Date().toISOString(),items:[{title:"API Key Required",advice:"Go to Settings (⚙)."}]});return}
+    setLoading(true);let prompt="";
+    if(type==="song"&&song){prompt=`Piano teacher: analyze progress on "${song.name}" (${song.genre}). `;if(song.currentAbility)prompt+=`Ability: ${song.currentAbility}. `;if(song.canReadSheet)prompt+=`Read sheet: ${song.canReadSheet}. `;if(song.sheetReadingStatus)prompt+=`Sheet reading progress: ${song.sheetReadingStatus}. `;if(song.gapsInUnderstanding)prompt+=`Gaps: ${song.gapsInUnderstanding}. `;if(song.notes)prompt+=`Notes: ${song.notes}. `;if(song.sections?.length){song.sections.forEach(s=>{prompt+=`Section "${s.name}":${s.stage}${s.notes?","+s.notes:""}. `})};prompt+=`Give 3-5 suggestions with real resources. Include tips for reading the sheet music of this specific piece. JSON only: [{"title":"","advice":"","resource_title":"","resource_url":"","resource_type":"YouTube|Article|Exercise"}]`}
+    else{const gr=allData.generalRoadmap;prompt=`Piano teacher: analyze overall. Level: ${gr.level}. `;["reading","technique","theory"].forEach(c=>{gr.skills[c].items.forEach(i=>{if(i.stage!=="Not Started")prompt+=`${i.name}:${i.stage}. `})});if(allData.songs.length)allData.songs.forEach(s=>{prompt+=`"${s.name}"(${sst(s)}). `});prompt+=`Include sheet music reading advice. 3-5 suggestions with resources. JSON only: [{"title":"","advice":"","resource_title":"","resource_url":"","resource_type":"YouTube|Article|Exercise"}]`}
+    try{const text=await enqueueAI(()=>ai(apiKey,prompt,true));const items=pJ(text)||[{title:"Suggestions",advice:text.substring(0,500)}];onSave({lastAnalyzed:new Date().toISOString(),items})}
+    catch(e){onSave({lastAnalyzed:new Date().toISOString(),items:[{title:"Error",advice:e.message}]})}setLoading(false)};
+  return h("div",{style:{marginTop:20}},
+    h("div",{onClick:()=>setExp(!exp),style:{background:t.bb,borderRadius:exp?"10px 10px 0 0":"10px",padding:"12px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",border:`1px solid ${t.cbd}`,borderBottom:exp?"none":undefined}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:8}},h("span",null,"💡"),h("span",{style:{fontSize:13,fontWeight:700,color:t.tx}},"Suggestions ",loading?"(analyzing...)":has?`(${sugg.items.length})`:""),sugg?.lastAnalyzed&&!loading&&h("span",{style:{fontSize:10,color:t.tm}},"· "+new Date(sugg.lastAnalyzed).toLocaleDateString())),
+      h("span",{style:{fontSize:14,color:t.tm,transform:exp?"rotate(90deg)":"none",transition:"transform .2s"}},"▸")),
+    exp&&h("div",{className:"fi",style:{background:t.cb,borderRadius:"0 0 10px 10px",border:`1px solid ${t.cbd}`,borderTop:`1px solid ${t.dv}`,padding:16}},
+      loading&&h("div",{style:{textAlign:"center",padding:24,color:t.ts}},h("span",{className:"pulse",style:{fontSize:24}},"🔍")," Analyzing..."),
+      !loading&&has&&sugg.items.map((item,i)=>h("div",{key:i,style:{padding:"14px 0",borderBottom:i<sugg.items.length-1?`1px solid ${t.dv}`:"none"}},h("div",{style:{fontSize:14,fontWeight:700,color:t.tx,marginBottom:4}},item.title),h("div",{style:{fontSize:13,color:t.ts,marginBottom:8,lineHeight:1.5}},item.advice),item.resource_url&&item.resource_title&&h("a",{href:item.resource_url,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",background:t.al,borderRadius:8,textDecoration:"none",fontSize:12,fontWeight:600,color:t.ac}},icons[item.resource_type]||"🔗"," ",item.resource_title," ↗"))),
+      !loading&&!has&&h("div",{style:{textAlign:"center",padding:16,color:t.tm,fontSize:13}},"Click re-analyze for suggestions."),
+      h("div",{style:{marginTop:12,display:"flex",justifyContent:"flex-end"}},h("button",{onClick:e=>{e.stopPropagation();analyze()},disabled:loading,style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.cbd}`,background:t.cb,color:loading?t.tm:t.ac,cursor:loading?"not-allowed":"pointer",fontSize:12,fontWeight:600}},loading?"Analyzing...":"🔄 Re-analyze"))))}
+
+// ─── Expandable Skill ───
+function ExpandableSkill({item,cat,t,apiKey,editMode,editingSkill,onEdit,onRename,onDelete,onStage,onUpdateResources}){
+  const[open,setOpen]=useState(false);const[loading,setLoading]=useState(false);const[newRes,setNewRes]=useState({title:"",url:""});
+  const isc=gc(item.stage,t);const icons={"YouTube":"▶","Article":"📄","Exercise":"🎯"};
+  const fetchRes=async()=>{if(!apiKey||loading)return;setLoading(true);
+    try{const text=await enqueueAI(()=>ai(apiKey,`Find 3-4 real learning resources for piano skill: "${item.name}". YouTube tutorials, articles, exercises. JSON only: [{"title":"","url":"","type":"YouTube|Article|Exercise","description":"1 sentence"}]`,true));
+      const res=pJ(text);if(res)onUpdateResources(res)}catch(e){onUpdateResources([{title:"Error loading",url:"",type:"",description:e.message}])}setLoading(false)};
+  const handleClick=()=>{if(editMode){onEdit();return}setOpen(!open)};
+  return h("div",{style:{borderBottom:`1px solid ${t.dv}`}},
+    h("div",{onClick:handleClick,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",gap:8,cursor:"pointer"}},
+      editMode&&editingSkill===item.id?h("input",{value:item.name,onChange:e=>onRename(e.target.value),onBlur:()=>onEdit(null),onClick:e=>e.stopPropagation(),autoFocus:true,style:{flex:1,fontSize:13,padding:"6px 10px",borderRadius:6,border:`1px solid ${t.ac}`,background:t.ib,color:t.tx,outline:"none",boxSizing:"border-box"}}):
+        h("span",{style:{fontSize:13,color:t.tx,flex:1,borderBottom:editMode?`1px dashed ${t.cbd}`:"none"}},item.name,!editMode&&!open&&item.resources?.length?h("span",{style:{fontSize:10,color:t.tm,marginLeft:6}},`(${item.resources.length} resources)`):""),
+      editMode?h("button",{onClick:e=>{e.stopPropagation();onDelete()},style:{background:"none",border:"none",color:t.dt,cursor:"pointer",fontSize:16,padding:4,flexShrink:0}},"×"):
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,flexShrink:0}},
+          h("select",{value:item.stage,onClick:e=>e.stopPropagation(),onChange:e=>{e.stopPropagation();onStage(e.target.value)},style:{padding:"5px 8px",borderRadius:6,border:`1px solid ${t.cbd}`,background:isc.b,color:isc.t,fontSize:11,fontWeight:600,cursor:"pointer",outline:"none",minHeight:28}},ST.map(s=>h("option",{key:s,value:s},s))),
+          h("span",{style:{fontSize:12,color:open?t.ac:t.tm,transform:open?"rotate(90deg)":"none",transition:"transform .2s"}},"▸"))),
+    !editMode&&open&&h("div",{className:"fi",style:{paddingBottom:14,paddingLeft:8}},
+      loading&&h("div",{style:{padding:12,color:t.ts,fontSize:12}},h("span",{className:"pulse"},"🔍")," Finding resources..."),
+      !loading&&!item.resources?.length&&!apiKey&&h("div",{style:{padding:12,color:t.ts,fontSize:12}},"Add your API key in Settings (⚙) to get AI-curated resources, or add your own below."),
+      !loading&&!item.resources?.length&&apiKey&&h("div",{style:{padding:12}},h(AIBtn,{onClick:fetchRes,loading:false,label:"Find resources",t})),
+      item.resources?.map((res,i)=>h("div",{key:i,style:{padding:"8px 0",borderBottom:i<item.resources.length-1?`1px solid ${t.dv}`:"none"}},
+        res.url?h("a",{href:res.url,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:600,color:t.ac,textDecoration:"none"}},icons[res.type]||"🔗"," ",res.title," ↗"):h("span",{style:{fontSize:13,fontWeight:600,color:t.tx}},res.title),
+        res.description&&h("div",{style:{fontSize:12,color:t.ts,marginTop:2}},res.description))),
+      h("div",{style:{marginTop:10,padding:10,background:t.bb,borderRadius:8}},
+        h("div",{style:{fontSize:11,color:t.ts,marginBottom:6}},"Add your own:"),
+        h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+          h(Inp,{value:newRes.title,onChange:v=>setNewRes(p=>({...p,title:v})),placeholder:"Name",t,style:{flex:"1 1 120px",fontSize:12,padding:"6px 8px"}}),
+          h(Inp,{value:newRes.url,onChange:v=>setNewRes(p=>({...p,url:v})),placeholder:"URL",t,style:{flex:"2 1 180px",fontSize:12,padding:"6px 8px"}}),
+          h("button",{onClick:()=>{if(newRes.title.trim()){onUpdateResources([...(item.resources||[]),{title:newRes.title.trim(),url:newRes.url.trim(),type:"",description:"Added manually"}]);setNewRes({title:"",url:""})}},style:{padding:"6px 12px",borderRadius:6,border:`1px dashed ${t.ac}`,background:"transparent",color:t.ac,cursor:"pointer",fontSize:11,fontWeight:600}},"+ Add"))),
+      item.resources?.length>0&&h("div",{style:{marginTop:8}},h("button",{onClick:()=>{onUpdateResources([]);fetchRes()},style:{background:"none",border:"none",color:t.ac,cursor:"pointer",fontSize:11,padding:0}},"🔄 Refresh AI resources"))))}
+
+// ─── Section Accordion ───
+function SecAcc({section,isOpen,onToggle,onUpdate,onDelete,onMove,canUp,canDown,t}){
+  const dots={"Mastered":t.mat,"Practicing":t.ac,"Learning":t.go,"Not Started":t.trk};const stc=gc(section.stage,t);
+  return h("div",{style:{marginBottom:8}},
+    h("div",{onClick:onToggle,style:{background:t.cb,borderRadius:isOpen?"10px 10px 0 0":"10px",border:isOpen?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,borderBottom:isOpen?"none":undefined,padding:"12px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,minHeight:48}},
+      h("div",{style:{width:12,height:12,borderRadius:"50%",background:dots[section.stage]||t.trk,flexShrink:0}}),
+      h("div",{style:{flex:1,minWidth:0}},h("span",{style:{fontFamily:FD,fontSize:14,fontWeight:700,color:t.tx,display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},section.name),h(SkillTags,{tags:section.skillTags,t})),
+      h("div",{style:{display:"flex",alignItems:"center",gap:8,flexShrink:0}},section.ytStart&&h("span",{style:{fontSize:10,color:t.tm}},"▶ "+section.ytStart),h("span",{style:{background:stc.b,color:stc.t,fontSize:9,fontWeight:600,padding:"3px 8px",borderRadius:4}},section.stage),h("span",{style:{fontSize:14,color:isOpen?t.ac:t.tm,transform:isOpen?"rotate(90deg)":"none",transition:"transform .2s"}},"▸"))),
+    isOpen&&h("div",{className:"fi",style:{background:t.cb,borderRadius:"0 0 10px 10px",border:`2px solid ${t.ac}`,borderTop:`1px solid ${t.dv}`,padding:16}},
+      h("div",{style:{marginBottom:14}},h("label",{style:{fontSize:11,color:t.ts,display:"block",marginBottom:4}},"Name:"),h(Inp,{value:section.name,onChange:v=>onUpdate("name",v),t,style:{width:"100%"}})),
+      h("div",{style:{marginBottom:14}},h("label",{style:{fontSize:11,color:t.ts,display:"block",marginBottom:4}},"Stage:"),h(SPills,{current:section.stage,onChange:v=>onUpdate("stage",v),t,small:true})),
+      h("div",{style:{marginBottom:14}},h("label",{style:{fontSize:11,color:t.ts,display:"block",marginBottom:4}},"Skills:"),h(SkillTags,{tags:section.skillTags,t,onRemove:i=>{const tags=[...(section.skillTags||[])];tags.splice(i,1);onUpdate("skillTags",tags)}}),h(Inp,{value:"",onChange:()=>{},placeholder:"Add skill + Enter",t,style:{width:"100%",fontSize:12,padding:"6px 8px",marginTop:4},onKeyDown:e=>{if(e.key==="Enter"&&e.target.value.trim()){onUpdate("skillTags",[...(section.skillTags||[]),e.target.value.trim()]);e.target.value=""}}})),
+      h("div",{style:{marginBottom:14}},h("label",{style:{fontSize:11,color:t.ts,display:"block",marginBottom:4}},"YouTube range:"),h("div",{style:{display:"flex",alignItems:"center",gap:8}},h(Inp,{value:section.ytStart||"",onChange:v=>onUpdate("ytStart",v),placeholder:"0:00",t,style:{width:80}}),h("span",{style:{fontSize:11,color:t.tm}},"to"),h(Inp,{value:section.ytEnd||"",onChange:v=>onUpdate("ytEnd",v),placeholder:"0:00",t,style:{width:80}}))),
+      h("div",{style:{marginBottom:14}},h("label",{style:{fontSize:11,color:t.ts,display:"block",marginBottom:4}},"Notes:"),h(TA,{value:section.notes||"",onChange:v=>onUpdate("notes",v),placeholder:"Notes...",rows:3,t})),
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},h("button",{onClick:onDelete,style:{background:"none",border:"none",color:t.dt,cursor:"pointer",fontSize:11,padding:4}},"Remove"),h("div",{style:{display:"flex",gap:6}},h("button",{onClick:()=>onMove(-1),disabled:!canUp,style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"2px 10px",cursor:canUp?"pointer":"default",color:canUp?t.ac:t.tm,fontSize:11}},"↑"),h("button",{onClick:()=>onMove(1),disabled:!canDown,style:{background:"none",border:`1px solid ${t.cbd}`,borderRadius:6,padding:"2px 10px",cursor:canDown?"pointer":"default",color:canDown?t.ac:t.tm,fontSize:11}},"↓")))))}
+
+// ─── Settings Modal ───
+function SettingsModal({t,apiKey,setApiKey,onExport,onImport,onReset,onClose}){
+  const fr=useRef(null);
+  return h("div",{style:{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16},onClick:e=>{if(e.target===e.currentTarget)onClose()}},
+    h("div",{className:"si wm",style:{background:t.cb,borderRadius:16,padding:28,maxWidth:480,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.25)",maxHeight:"90vh",overflow:"auto"}},
+      h("div",{style:{fontSize:20,fontWeight:700,color:t.tx,fontFamily:FD,marginBottom:20}},"Settings"),
+      h("div",{style:{marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Anthropic API Key"),h("p",{style:{fontSize:12,color:t.ts,marginBottom:8}},"For AI features. Get from console.anthropic.com"),h(Inp,{value:apiKey,onChange:setApiKey,placeholder:"sk-ant-...",type:"password",t,style:{width:"100%"}}),h("p",{style:{fontSize:10,color:t.tm,marginTop:4}},"Stored in browser only.")),
+      h("div",{style:{borderTop:`1px solid ${t.dv}`,paddingTop:20,marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Data"),
+        h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+          h("button",{onClick:onExport,style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.ac}`,background:"transparent",color:t.ac,cursor:"pointer",fontSize:12,fontWeight:600}},"📥 Export"),
+          h("button",{onClick:()=>fr.current?.click(),style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.cbd}`,background:"transparent",color:t.ts,cursor:"pointer",fontSize:12,fontWeight:600}},"📤 Import"),
+          h("input",{ref:fr,type:"file",accept:".json",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>onImport(ev.target.result);r.readAsText(f)}}}),
+          h("button",{onClick:onReset,style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${t.dt}`,background:"transparent",color:t.dt,cursor:"pointer",fontSize:12,fontWeight:600}},"Reset"))),
+      h("div",{style:{marginTop:20,display:"flex",justifyContent:"flex-end"}},h("button",{onClick:onClose,style:{padding:"10px 24px",borderRadius:8,border:"none",background:t.ac,color:"#fff",cursor:"pointer",fontSize:13,fontWeight:700}},"Done"))))}
+
+// Sheet reading status options
+const SRS=["Not yet","Working on it","Yes"];
+
+// ─── Song Detail ───
+function SongDetail({song,t,apiKey,onUpdate,onDelete,onBack}){
+  const[tab,setTab]=useState("sections");const[openSec,setOpenSec]=useState(null);const[newSec,setNewSec]=useState("");
+  const[findingYT,setFindingYT]=useState(false);const[findingSM,setFindingSM]=useState(false);const[findingTips,setFindingTips]=useState(false);
+  const p=sp(song),stage=sst(song),stc=gc(stage,t);
+  const tabs=[{id:"sections",l:`Sections (${(song.sections||[]).length})`},{id:"resources",l:"Resources"},{id:"notes",l:"Notes"},{id:"settings",l:"Settings"}];
+  const uSec=(sid,f,v)=>onUpdate("sections",(song.sections||[]).map(s=>s.id===sid?{...s,[f]:v}:s));
+  const aSec=(name,tags)=>{const n=name||newSec.trim()||`Section ${(song.sections||[]).length+1}`;const ns={id:Date.now().toString()+Math.random(),name:n,stage:"Not Started",notes:"",ytStart:"",ytEnd:"",skillTags:tags||[]};onUpdate("sections",[...(song.sections||[]),ns]);setNewSec("");setOpenSec(ns.id)};
+  const dSec=sid=>{onUpdate("sections",(song.sections||[]).filter(s=>s.id!==sid));if(openSec===sid)setOpenSec(null)};
+  const mSec=(sid,dir)=>{const secs=[...(song.sections||[])];const i=secs.findIndex(s=>s.id===sid);if((dir===-1&&i===0)||(dir===1&&i===secs.length-1))return;[secs[i],secs[i+dir]]=[secs[i+dir],secs[i]];onUpdate("sections",secs)};
+  const findYT=async()=>{setFindingYT(true);try{const text=await enqueueAI(()=>ai(apiKey,`Find the best YouTube step-by-step piano tutorial for learning "${song.name}". I need a slow, hands-separate tutorial that teaches how to play it — NOT a performance video. Search for "how to play ${song.name} piano tutorial slow". Give the direct youtube.com watch URL. JSON: {"title":"video title","url":"https://youtube.com/watch?v=..."}`,true));const r=pJ(text);if(r?.url){onUpdate("youtubeUrl",r.url)}}catch{}setFindingYT(false)};
+  const findSM=async()=>{setFindingSM(true);try{const text=await enqueueAI(()=>ai(apiKey,`Find the ORIGINAL piano sheet music for "${song.name}" — the authentic, unmodified composer's score. NOT a simplified or easy arrangement. I need a direct link where I can view or download the actual PDF/score. Search IMSLP for the direct PDF link (not the wiki page), or Musescore, mutopiaproject.org, or free-scores.com. Return the direct download/view URL. JSON: {"title":"Original score by [composer]","url":"direct URL to PDF or viewable score"}`,true,0,"sheet"));const r=pJ(text);if(r?.url){onUpdate("sheetMusicUrl",r.url)}}catch{}setFindingSM(false)};
+  const findReadingTips=async()=>{setFindingTips(true);try{const text=await enqueueAI(()=>ai(apiKey,`Give 3-4 specific tips for reading the sheet music of "${song.name}" (${song.genre}) on piano. What should a beginner watch out for? Include the key signature, time signature, and any tricky notation. Also find a real YouTube guide or article for reading this piece. JSON: [{"tip":"specific tip","resource_title":"","resource_url":"","resource_type":"YouTube|Article"}]`,true,0,"sheet"));const r=pJ(text);if(r)onUpdate("sheetReadingTips",r)}catch(e){onUpdate("sheetReadingTips",[{tip:"Could not load: "+e.message}])}setFindingTips(false)};
+
+  return h("div",{className:"fi",style:{maxWidth:720,margin:"0 auto",padding:"24px 20px"}},
+    h("button",{onClick:onBack,style:{background:"none",border:"none",color:t.ac,cursor:"pointer",fontSize:14,fontWeight:600,marginBottom:20,padding:4}},"← Back"),
+    // Header
+    h("div",{className:"su",style:{background:t.cb,borderRadius:12,border:`1px solid ${t.cbd}`,padding:"20px 24px",boxShadow:t.sh,marginBottom:20}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}},
+        h("div",{style:{minWidth:0}},h("div",{style:{fontFamily:FD,fontSize:24,fontWeight:700,color:t.tx}},song.name),h("div",{style:{fontSize:12,color:t.ts,marginTop:4}},`${song.genre} · ${song.type} · ${(song.sections||[]).length} sections`),h(SkillTags,{tags:song.skillTags,t})),
+        h("span",{style:{background:stc.b,color:stc.t,fontSize:11,fontWeight:600,padding:"4px 12px",borderRadius:6,flexShrink:0}},stage)),
+      h("div",{style:{display:"flex",alignItems:"center",gap:10,marginTop:14}},h(PBar,{percent:p,t,height:7}),h("span",{style:{fontSize:12,color:t.tm}},p+"%"))),
+    // Tabs
+    h("div",{className:"tb",style:{display:"flex",background:t.tab,borderRadius:10,padding:4,marginBottom:20,gap:2}},tabs.map(tb=>h("button",{key:tb.id,onClick:()=>setTab(tb.id),style:{flex:1,padding:"10px 6px",borderRadius:8,border:"none",cursor:"pointer",background:tab===tb.id?t.ta:"transparent",color:tab===tb.id?t.tx:t.ts,fontWeight:tab===tb.id?700:500,fontSize:12,boxShadow:tab===tb.id?t.sh:"none"}},tb.l))),
+    h("div",{className:"fi",key:tab},
+      // Sections tab
+      tab==="sections"&&h("div",null,
+        !(song.sections||[]).length&&h("div",{style:{textAlign:"center",padding:32,color:t.ts}},"📄",h("div",{style:{fontSize:14,fontWeight:600,margin:"8px 0 4px"}},"No sections yet")),
+        (song.sections||[]).map((sec,i)=>h(SecAcc,{key:sec.id,section:sec,isOpen:openSec===sec.id,onToggle:()=>setOpenSec(openSec===sec.id?null:sec.id),onUpdate:(f,v)=>uSec(sec.id,f,v),onDelete:()=>dSec(sec.id),onMove:d=>mSec(sec.id,d),canUp:i>0,canDown:i<(song.sections||[]).length-1,t})),
+        h("div",{style:{display:"flex",gap:8,marginTop:8}},h(Inp,{value:newSec,onChange:setNewSec,placeholder:"New section...",t,style:{flex:1}}),h("button",{onClick:()=>aSec(),style:{padding:"10px 16px",borderRadius:8,border:`2px dashed ${t.ac}`,background:"transparent",color:t.ac,cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}},"+ Add"))),
+      // Resources tab
+      tab==="resources"&&h("div",{style:{background:t.cb,borderRadius:12,border:`1px solid ${t.cbd}`,padding:24}},
+        // YouTube
+        h("div",{style:{marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"YouTube Video"),
+          h("div",{style:{display:"flex",gap:8,alignItems:"center",marginBottom:10}},h(Inp,{value:song.youtubeUrl||"",onChange:v=>onUpdate("youtubeUrl",v),placeholder:"Paste YouTube link...",t,style:{flex:1}}),!song.youtubeUrl&&apiKey&&h(AIBtn,{onClick:findYT,loading:findingYT,label:"Find",t})),
+          h("div",{style:{display:"flex",alignItems:"center",gap:8}},h("span",{style:{fontSize:12,color:t.ts}},"▶ Min:"),h(Inp,{value:song.youtubeTimestamp||"",onChange:v=>onUpdate("youtubeTimestamp",v),placeholder:"0:00",t,style:{width:80}}))),
+        // Sheet Music
+        h("div",{style:{borderTop:`1px solid ${t.dv}`,paddingTop:20,marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Sheet Music"),
+          h("div",{style:{display:"flex",gap:8,alignItems:"center"}},h(Inp,{value:song.sheetMusicUrl||"",onChange:v=>onUpdate("sheetMusicUrl",v),placeholder:"IMSLP, Musescore link...",t,style:{flex:1}}),!song.sheetMusicUrl&&apiKey&&h(AIBtn,{onClick:findSM,loading:findingSM,label:"Find",t}))),
+        // Sheet Music Reading Tracker
+        h("div",{style:{borderTop:`1px solid ${t.dv}`,paddingTop:20,marginBottom:20}},
+          h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"📖 Can I Read This Piece's Sheet Music?"),
+          h("div",{style:{display:"flex",gap:6,marginBottom:12}},SRS.map(s=>h("button",{key:s,onClick:()=>onUpdate("sheetReadingStatus",s),style:{padding:"7px 14px",borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:600,border:(song.sheetReadingStatus||"Not yet")===s?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:(song.sheetReadingStatus||"Not yet")===s?t.ac:t.cb,color:(song.sheetReadingStatus||"Not yet")===s?"#fff":t.ts}},s))),
+          // AI reading tips
+          h("div",{style:{marginBottom:8}},h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},h("span",{style:{fontSize:12,fontWeight:600,color:t.ts}},"Reading tips for this piece:"),apiKey&&h(AIBtn,{onClick:findReadingTips,loading:findingTips,label:"Get tips",t})),
+            song.sheetReadingTips?.map((tip,i)=>h("div",{key:i,style:{padding:"8px 0",borderBottom:i<song.sheetReadingTips.length-1?`1px solid ${t.dv}`:"none"}},
+              h("div",{style:{fontSize:13,color:t.tx,marginBottom:4}},tip.tip),
+              tip.resource_url&&tip.resource_title&&h("a",{href:tip.resource_url,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,color:t.ac,textDecoration:"none"}},tip.resource_type==="YouTube"?"▶":"📄"," ",tip.resource_title," ↗"))))),
+        // Starting info
+        song.type==="Existing"&&(song.currentAbility||song.canReadSheet)&&h("div",{style:{borderTop:`1px solid ${t.dv}`,paddingTop:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:10}},"Starting Info"),
+          song.currentAbility&&h("div",{style:{fontSize:13,color:t.ts,marginBottom:6}},"Ability: "+song.currentAbility),
+          song.canReadSheet&&h("div",{style:{fontSize:13,color:t.ts,marginBottom:6}},"Read sheet: "+song.canReadSheet),
+          song.knowsKey&&h("div",{style:{fontSize:13,color:t.ts,marginBottom:6}},"Key: "+song.knowsKey),
+          song.understandsChords&&h("div",{style:{fontSize:13,color:t.ts,marginBottom:6}},"Chords: "+song.understandsChords),
+          song.gapsInUnderstanding&&h("div",{style:{fontSize:13,color:t.ts}},h("b",null,"Gaps: "),song.gapsInUnderstanding))),
+      // Notes tab
+      tab==="notes"&&h("div",{style:{background:t.cb,borderRadius:12,border:`1px solid ${t.cbd}`,padding:24}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Notes"),h(TA,{value:song.notes||"",onChange:v=>onUpdate("notes",v),placeholder:"Anything about this piece...",rows:10,t})),
+      // Settings tab
+      tab==="settings"&&h("div",{style:{background:t.cb,borderRadius:12,border:`1px solid ${t.cbd}`,padding:24}},
+        h("div",{style:{marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Name"),h(Inp,{value:song.name,onChange:v=>onUpdate("name",v),t,style:{width:"100%"}})),
+        h("div",{style:{marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Genre"),h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},["Classical","Film","Modern"].map(g=>h("button",{key:g,onClick:()=>onUpdate("genre",g),style:{padding:"8px 18px",borderRadius:20,border:song.genre===g?"none":`1px solid ${t.pbd}`,background:song.genre===g?t.pab:t.pb,color:song.genre===g?t.pat:t.ts,cursor:"pointer",fontSize:12,fontWeight:600}},g)))),
+        h("div",{style:{marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Skill Tags"),h(SkillTags,{tags:song.skillTags,t,onRemove:i=>{const tags=[...(song.skillTags||[])];tags.splice(i,1);onUpdate("skillTags",tags)}}),h(Inp,{value:"",onChange:()=>{},placeholder:"Add skill + Enter",t,style:{width:"100%",marginTop:8},onKeyDown:e=>{if(e.key==="Enter"&&e.target.value.trim()){onUpdate("skillTags",[...(song.skillTags||[]),e.target.value.trim()]);e.target.value=""}}})),
+        !(song.sections||[]).length&&h("div",{style:{marginBottom:20}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Stage"),h(SPills,{current:song.stage,onChange:v=>onUpdate("stage",v),t})),
+        h("div",{style:{borderTop:`1px solid ${t.dv}`,paddingTop:20}},h("button",{onClick:()=>{if(confirm("Remove?"))onDelete()},style:{background:"none",border:"none",color:t.dt,cursor:"pointer",fontSize:13,fontWeight:600,padding:4}},"Remove song")))),
+    h(SugPanel,{type:"song",song,t,apiKey,onSave:s=>onUpdate("suggestions",s)}))}
+
+// ─── Wizard ───
+function Wizard({t,apiKey,onSave,onCancel}){
+  const[step,setStep]=useState(0);const[song,setSong]=useState({name:"",genre:"Classical",type:"New",stage:"Not Started",youtubeUrl:"",youtubeTimestamp:"",sheetMusicUrl:"",notes:"",sections:[],currentAbility:"",addSections:null,canReadSheet:"",knowsKey:"",understandsChords:"",gapsInUnderstanding:"",skillTags:[],sheetReadingStatus:"Not yet"});
+  const[secI,setSecI]=useState([{name:"",tags:[]}]);const[aiLoading,setAiLoading]=useState(false);const up=(f,v)=>setSong(p=>({...p,[f]:v}));
+  const suggestSecs=async()=>{if(!apiKey)return;setAiLoading(true);try{const text=await enqueueAI(()=>ai(apiKey,`Analyze piano piece "${song.name}" (${song.genre}). Break into practice sections with skills needed. JSON: [{"name":"section","skills":["skill1"]}]`));const r=pJ(text);if(r)setSecI(r.map(s=>({name:s.name,tags:s.skills||[]})))}catch{}setAiLoading(false)};
+  const suggestTags=async()=>{if(!apiKey)return;try{const text=await enqueueAI(()=>ai(apiKey,`Piano skills needed for "${song.name}" (${song.genre}). 3-6 tags. JSON: ["skill1","skill2"]`));const r=pJ(text);if(r&&Array.isArray(r))up("skillTags",r)}catch{}};
+  const steps=[];
+  steps.push(h("div",{key:"0"},h("div",{style:{fontSize:18,fontWeight:700,color:t.tx,marginBottom:16,fontFamily:FD}},"What song?"),h(Inp,{value:song.name,onChange:v=>up("name",v),placeholder:"Song name...",t,style:{width:"100%",marginBottom:14}}),h("div",{style:{fontSize:12,color:t.ts,marginBottom:8}},"Genre:"),h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},["Classical","Film","Modern"].map(g=>h("button",{key:g,onClick:()=>up("genre",g),style:{padding:"8px 18px",borderRadius:20,border:song.genre===g?"none":`1px solid ${t.pbd}`,background:song.genre===g?t.pab:t.pb,color:song.genre===g?t.pat:t.ts,cursor:"pointer",fontSize:12,fontWeight:600}},g)))));
+  steps.push(h("div",{key:"1"},h("div",{style:{fontSize:18,fontWeight:700,color:t.tx,marginBottom:16,fontFamily:FD}},"Already know it?"),h("div",{style:{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}},[{v:"Existing",l:"Yes",d:"From YouTube/ear"},{v:"New",l:"No",d:"Want to learn"}].map(o=>h("button",{key:o.v,onClick:()=>up("type",o.v),style:{flex:"1 1 180px",padding:16,borderRadius:10,textAlign:"left",cursor:"pointer",border:song.type===o.v?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:song.type===o.v?t.al:t.cb}},h("div",{style:{fontSize:14,fontWeight:700,color:t.tx,marginBottom:4}},o.l),h("div",{style:{fontSize:11,color:t.ts}},o.d)))),song.type==="Existing"&&h("div",null,h("div",{style:{fontSize:12,color:t.ts,marginBottom:8}},"How well?"),h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}},["Can play it fully","Know most of it","Know some parts","Just started"].map(o=>h("button",{key:o,onClick:()=>up("currentAbility",o),style:{padding:"7px 12px",borderRadius:8,fontSize:11,cursor:"pointer",fontWeight:600,border:song.currentAbility===o?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:song.currentAbility===o?t.al:t.cb,color:song.currentAbility===o?t.ac:t.ts}},o))),h(Inp,{value:song.youtubeUrl,onChange:v=>up("youtubeUrl",v),placeholder:"YouTube link...",t,style:{width:"100%",marginBottom:8}}),h("div",{style:{display:"flex",gap:8,alignItems:"center"}},h("span",{style:{fontSize:12,color:t.ts}},"Min:"),h(Inp,{value:song.youtubeTimestamp,onChange:v=>up("youtubeTimestamp",v),placeholder:"4:32",t,style:{width:80}})))));
+  if(song.type==="Existing")steps.push(h("div",{key:"2u"},h("div",{style:{fontSize:18,fontWeight:700,color:t.tx,marginBottom:8,fontFamily:FD}},"What do you understand?"),[{f:"canReadSheet",q:"Read sheet music?",opts:["Yes","Partially","No"]},{f:"knowsKey",q:"Know the key?",opts:["Yes","No"]},{f:"understandsChords",q:"Understand chords?",opts:["Yes","Somewhat","No"]}].map(item=>h("div",{key:item.f,style:{marginBottom:14}},h("div",{style:{fontSize:13,color:t.tx,marginBottom:6,fontWeight:600}},item.q),h("div",{style:{display:"flex",gap:6}},item.opts.map(o=>h("button",{key:o,onClick:()=>up(item.f,o),style:{padding:"6px 14px",borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:600,border:song[item.f]===o?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:song[item.f]===o?t.al:t.cb,color:song[item.f]===o?t.ac:t.ts}},o))))),h("div",{style:{marginTop:8}},h("div",{style:{fontSize:13,fontWeight:600,color:t.tx,marginBottom:6}},"Gaps?"),h(TA,{value:song.gapsInUnderstanding,onChange:v=>up("gapsInUnderstanding",v),placeholder:"What don't you understand?",rows:2,t}))));
+  steps.push(h("div",{key:"sec"},h("div",{style:{fontSize:18,fontWeight:700,color:t.tx,marginBottom:8,fontFamily:FD}},"Break into sections?"),h("div",{style:{display:"flex",gap:12,flexWrap:"wrap"}},[{v:true,icon:"✂️",l:"Yes"},{v:false,icon:"⏭️",l:"Skip"}].map(o=>h("button",{key:String(o.v),onClick:()=>up("addSections",o.v),style:{flex:"1 1 140px",padding:18,borderRadius:10,cursor:"pointer",textAlign:"center",border:song.addSections===o.v?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:song.addSections===o.v?t.al:t.cb}},h("div",{style:{fontSize:22,marginBottom:6}},o.icon),h("div",{style:{fontSize:14,fontWeight:700,color:t.tx}},o.l))))));
+  if(song.addSections===true)steps.push(h("div",{key:"sn"},h("div",{style:{fontSize:18,fontWeight:700,color:t.tx,marginBottom:8,fontFamily:FD}},"Name sections"),apiKey&&h("button",{onClick:suggestSecs,disabled:aiLoading,style:{padding:"10px 16px",borderRadius:8,border:`1px solid ${t.ac}`,background:t.al,color:t.ac,cursor:aiLoading?"not-allowed":"pointer",fontSize:12,fontWeight:600,marginBottom:16,width:"100%"}},aiLoading?h("span",null,h("span",{className:"pulse"},"🤖")," Analyzing..."):h("span",null,"🤖 Let AI suggest sections")),aiLoading&&h("div",{style:{textAlign:"center",padding:20,color:t.ts}},h("span",{className:"pulse",style:{fontSize:20}},"🔍")),!aiLoading&&secI.map((si,i)=>h("div",{key:i,style:{marginBottom:10,padding:12,background:t.bb,borderRadius:8}},h("div",{style:{display:"flex",gap:8,marginBottom:6,alignItems:"center"}},h("span",{style:{fontSize:12,color:t.tm,width:20,textAlign:"right"}},(i+1)+"."),h(Inp,{value:si.name,onChange:v=>{const n=[...secI];n[i]={...n[i],name:v};setSecI(n)},placeholder:`Section ${i+1}`,t,style:{flex:1}}),secI.length>1&&h("button",{onClick:()=>setSecI(secI.filter((_,j)=>j!==i)),style:{background:"none",border:"none",color:t.dt,cursor:"pointer",fontSize:18,padding:4}},"×")),h("div",{style:{marginLeft:28}},h(SkillTags,{tags:si.tags,t,onRemove:ti=>{const n=[...secI];n[i]={...n[i],tags:n[i].tags.filter((_,j)=>j!==ti)};setSecI(n)}}),h(Inp,{value:"",onChange:()=>{},placeholder:"Skill tag + Enter",t,style:{width:"100%",fontSize:11,padding:"4px 8px",marginTop:4},onKeyDown:e=>{if(e.key==="Enter"&&e.target.value.trim()){const n=[...secI];n[i]={...n[i],tags:[...n[i].tags,e.target.value.trim()]};setSecI(n);e.target.value=""}}})))),!aiLoading&&h("button",{onClick:()=>setSecI([...secI,{name:"",tags:[]}]),style:{background:"none",border:`1px dashed ${t.ac}`,borderRadius:6,padding:"6px 14px",color:t.ac,cursor:"pointer",fontSize:11,fontWeight:600,marginTop:4}},"+ Add")));
+  steps.push(h("div",{key:"notes"},h("div",{style:{fontSize:18,fontWeight:700,color:t.tx,marginBottom:8,fontFamily:FD}},"Final details"),h("div",{style:{marginBottom:16}},h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Skill tags"),h(SkillTags,{tags:song.skillTags,t,onRemove:i=>{const tags=[...song.skillTags];tags.splice(i,1);up("skillTags",tags)}}),h("div",{style:{display:"flex",gap:6,marginTop:6}},h(Inp,{value:"",onChange:()=>{},placeholder:"Add + Enter",t,style:{flex:1},onKeyDown:e=>{if(e.key==="Enter"&&e.target.value.trim()){up("skillTags",[...(song.skillTags||[]),e.target.value.trim()]);e.target.value=""}}}),apiKey&&h(AIBtn,{onClick:suggestTags,loading:false,label:"Suggest",t}))),h("div",null,h("label",{style:{fontSize:13,fontWeight:700,color:t.tx,display:"block",marginBottom:8}},"Notes"),h(TA,{value:song.notes,onChange:v=>up("notes",v),placeholder:"Your notes...",rows:4,t}))));
+  const canNext=step===0?song.name.trim()!=="":steps[step]?.key==="sec"?song.addSections!==null:true;const isLast=step===steps.length-1;
+  const save=()=>{const as={"Can play it fully":"Practicing","Know most of it":"Practicing","Know some parts":"Learning","Just started":"Learning"};const secs=song.addSections?secI.filter(s=>s.name.trim()).map((s,i)=>({id:Date.now().toString()+i,name:s.name.trim(),stage:"Not Started",notes:"",ytStart:"",ytEnd:"",skillTags:s.tags||[]})):[];onSave({...song,id:Date.now().toString(),sections:secs,stage:song.type==="Existing"?(as[song.currentAbility]||"Learning"):"Not Started"})};
+  return h("div",{style:{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16},onClick:e=>{if(e.target===e.currentTarget)onCancel()}},h("div",{className:"si wm",style:{background:t.cb,borderRadius:16,padding:28,maxWidth:520,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.25)",maxHeight:"90vh",overflow:"auto"}},h("div",{style:{display:"flex",gap:6,marginBottom:24,justifyContent:"center"}},steps.map((_,i)=>h("div",{key:i,style:{width:8,height:8,borderRadius:"50%",background:i<=step?t.ac:t.trk}}))),steps[step],h("div",{style:{display:"flex",justifyContent:"space-between",marginTop:24,gap:12}},h("button",{onClick:step===0?onCancel:()=>setStep(s=>s-1),style:{padding:"10px 20px",borderRadius:8,border:`1px solid ${t.cbd}`,background:t.cb,color:t.ts,cursor:"pointer",fontSize:13,fontWeight:600}},step===0?"Cancel":"Back"),h("button",{onClick:isLast?save:()=>setStep(s=>s+1),disabled:!canNext,style:{padding:"10px 24px",borderRadius:8,border:"none",background:canNext?t.ac:t.trk,color:canNext?"#fff":t.tm,cursor:canNext?"pointer":"not-allowed",fontSize:13,fontWeight:700}},isLast?"Add Song":"Next →"))))}
+
+// ─── Main App ───
+function App(){
+  const[theme,setTheme]=useState(()=>localStorage.getItem("pj-theme")||"light");
+  const[data,setData]=useState(()=>ld()||DD);const[apiKey,setApiKey]=useState(lk);
+  const[vm,setVm]=useState("cards");const[filter,setFilter]=useState("All");const[search,setSearch]=useState("");
+  const[showWiz,setShowWiz]=useState(false);const[showSet,setShowSet]=useState(false);const[sel,setSel]=useState(null);
+  const[em,setEm]=useState(false);const[ns,setNs]=useState({reading:"",technique:"",theory:""});const[es,setEs]=useState(null);
+  const[fbReady,setFbReady]=useState(false);const[syncStatus,setSyncStatus]=useState("connecting");
+  const skipNextSync=useRef(false);
+  const t=TH[theme];
+
+  // Firebase auth + real-time listener
+  useEffect(()=>{
+    auth.signInAnonymously().then(cred=>{
+      fbUid=cred.user.uid;
+      setFbReady(true);setSyncStatus("synced");
+      // Load from Firebase first, fall back to local
+      const ref=getDocRef();
+      if(ref){
+        ref.get().then(doc=>{
+          if(doc.exists){
+            try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData));setSyncStatus("synced")}catch{}
+          }else{
+            // First time: push local data to Firebase
+            ref.set({data:JSON.stringify(data),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});setSyncStatus("synced");
+          }
+        }).catch(()=>setSyncStatus("offline"));
+        // Real-time listener for cross-device sync
+        ref.onSnapshot(doc=>{
+          if(doc.exists&&!skipNextSync.current){
+            try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData))}catch{}
+          }
+          skipNextSync.current=false;
+        },()=>setSyncStatus("offline"));
+      }
+    }).catch(()=>{setSyncStatus("offline");setFbReady(false)});
+  },[]);
+
+  // Save to both localStorage and Firebase when data changes
+  const saveTimeout=useRef(null);
+  useEffect(()=>{
+    localStorage.setItem("pj",JSON.stringify(data));
+    // Debounce Firebase writes to avoid excessive writes
+    if(saveTimeout.current)clearTimeout(saveTimeout.current);
+    saveTimeout.current=setTimeout(()=>{
+      const ref=getDocRef();
+      if(ref){skipNextSync.current=true;ref.set({data:JSON.stringify(data),updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).then(()=>setSyncStatus("synced")).catch(()=>setSyncStatus("offline"));}
+    },1500);
+  },[data]);
+  useEffect(()=>{skv(apiKey)},[apiKey]);useEffect(()=>{localStorage.setItem("pj-theme",theme)},[theme]);useEffect(()=>{window.scrollTo({top:0,behavior:"smooth"})},[sel]);
+  const toggle=useCallback(()=>setTheme(th=>th==="light"?"dark":"light"),[]);
+  const filtered=useMemo(()=>{let s=data.songs;if(filter!=="All"){if(["Classical","Film","Modern"].includes(filter))s=s.filter(x=>x.genre===filter);else s=s.filter(x=>x.type===filter)}if(search.trim()){const q=search.toLowerCase();s=s.filter(x=>x.name.toLowerCase().includes(q))}return s},[data,filter,search]);
+  const addSong=useCallback(song=>{setData(p=>({...p,songs:[...p.songs,song]}));setShowWiz(false)},[]);
+  const delSong=useCallback(id=>{setData(p=>({...p,songs:p.songs.filter(s=>s.id!==id)}));setSel(null)},[]);
+  const upSong=useCallback((id,f,v)=>{setData(p=>({...p,songs:p.songs.map(s=>s.id===id?{...s,[f]:v}:s)}))},[]);
+  const upGen=useCallback((cat,iid,st)=>{setData(p=>{const d=JSON.parse(JSON.stringify(p));const it=d.generalRoadmap.skills[cat].items.find(i=>i.id===iid);if(it)it.stage=st;return d})},[]);
+  const addGS=useCallback((cat,name)=>{setData(p=>{const d=JSON.parse(JSON.stringify(p));d.generalRoadmap.skills[cat].items.push({id:Date.now().toString(),name,stage:"Not Started"});return d})},[]);
+  const delGS=useCallback((cat,iid)=>{setData(p=>{const d=JSON.parse(JSON.stringify(p));d.generalRoadmap.skills[cat].items=d.generalRoadmap.skills[cat].items.filter(i=>i.id!==iid);return d})},[]);
+  const renGS=useCallback((cat,iid,name)=>{setData(p=>{const d=JSON.parse(JSON.stringify(p));const it=d.generalRoadmap.skills[cat].items.find(i=>i.id===iid);if(it)it.name=name;return d})},[]);
+  const upGSR=useCallback((cat,iid,res)=>{setData(p=>{const d=JSON.parse(JSON.stringify(p));const it=d.generalRoadmap.skills[cat].items.find(i=>i.id===iid);if(it)it.resources=res;return d})},[]);
+  const lvlUp=useCallback(nl=>{setData(p=>{const d=JSON.parse(JSON.stringify(p));d.generalRoadmap.level=nl;const pr=LP[nl];if(pr)Object.keys(pr).forEach(c=>{pr[c].forEach((sk,i)=>{d.generalRoadmap.skills[c].items.push({id:Date.now().toString()+c+i,name:sk.name,stage:"Not Started"})})});return d})},[]);
+  const exportD=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download="piano-journey.json";a.click()};
+  const importD=text=>{try{const d=JSON.parse(text);if(d.generalRoadmap&&d.songs!==undefined){setData(d);alert("Imported!")}else alert("Invalid")}catch{alert("Error")}};
+  const resetD=()=>{if(confirm("Reset all?")){setData(DD);setSel(null)}};
+  const SM=showSet&&h(SettingsModal,{t,apiKey,setApiKey,onExport:exportD,onImport:importD,onReset:resetD,onClose:()=>setShowSet(false)});
+
+  if(sel?.type==="song"){const song=data.songs.find(s=>s.id===sel.id);if(!song){setSel(null);return null}return h("div",{style:{minHeight:"100vh",background:t.bg}},h(TopBar,{theme,toggleTheme:toggle,t,onSettings:()=>setShowSet(true),syncStatus}),h(SongDetail,{song,t,apiKey,onUpdate:(f,v)=>upSong(song.id,f,v),onDelete:()=>delSong(song.id),onBack:()=>setSel(null)}),SM)}
+
+  if(sel?.type==="general"){
+    const cats=[{key:"reading",label:"Reading",icon:"📖"},{key:"technique",label:"Technique",icon:"🎹"},{key:"theory",label:"Theory",icon:"🎵"}];
+    const levels=["Beginner","Intermediate","Master"];const curLvl=data.generalRoadmap.level,li=levels.indexOf(curLvl),nl=li<levels.length-1?levels[li+1]:null;
+    const allI=[...data.generalRoadmap.skills.reading.items,...data.generalRoadmap.skills.technique.items,...data.generalRoadmap.skills.theory.items];
+    const op=cp(allI),qc=allI.filter(i=>i.stage==="Practicing"||i.stage==="Mastered").length,clu=nl&&allI.length>0&&qc===allI.length,rem=allI.length-qc;
+    return h("div",{style:{minHeight:"100vh",background:t.bg}},h(TopBar,{theme,toggleTheme:toggle,t,onSettings:()=>setShowSet(true),syncStatus}),
+      h("div",{className:"fi",style:{maxWidth:700,margin:"0 auto",padding:"24px 20px"}},
+        h("button",{onClick:()=>{setSel(null);setEm(false)},style:{background:"none",border:"none",color:t.ac,cursor:"pointer",fontSize:14,fontWeight:600,marginBottom:20,padding:4}},"← Back"),
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},h("div",{style:{fontFamily:FD,fontSize:26,fontWeight:700,color:t.tx}},"General Roadmap"),h("button",{onClick:()=>{setEm(!em);setEs(null)},style:{padding:"6px 14px",borderRadius:8,border:em?`2px solid ${t.ac}`:`1px solid ${t.cbd}`,background:em?t.al:t.cb,color:em?t.ac:t.ts,cursor:"pointer",fontSize:12,fontWeight:600}},em?"✓ Done":"✎ Edit")),
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:20,flexWrap:"wrap"}},h("span",{style:{background:t.al,color:t.ac,fontSize:12,fontWeight:700,padding:"4px 14px",borderRadius:12}},curLvl),levels.slice(li+1).map(l=>h("span",{key:l,style:{fontSize:12,color:t.fl}},"→ "+l))),
+        clu&&!em&&h("div",{className:"si",style:{background:t.ac,borderRadius:12,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}},h("div",null,h("div",{style:{fontSize:15,fontWeight:700,color:"#fff"}},`Completed ${curLvl}!`)),h("button",{onClick:()=>lvlUp(nl),style:{padding:"8px 20px",borderRadius:8,border:"2px solid rgba(255,255,255,.5)",background:"rgba(255,255,255,.15)",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:700}},`Level Up to ${nl} →`)),
+        nl&&!clu&&!em&&h("div",{style:{background:t.bb,borderRadius:10,padding:"12px 16px",marginBottom:20}},h("div",{style:{fontSize:12,color:t.ts}},`${op}% · ${rem} skill${rem!==1?"s":""} need Practicing/Mastered for ${nl}.`)),
+        cats.map((cat,ci)=>{const skill=data.generalRoadmap.skills[cat.key],p=cp(skill.items);
+          return h("div",{key:cat.key,className:"su",style:{background:t.cb,borderRadius:12,border:`1px solid ${t.cbd}`,padding:20,marginBottom:16,boxShadow:t.sh,animationDelay:`${ci*.08}s`}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},h("div",{style:{display:"flex",alignItems:"center",gap:8}},h("span",{style:{fontSize:18}},cat.icon),h("span",{style:{fontFamily:FD,fontSize:18,fontWeight:700,color:t.tx}},cat.label)),h("span",{style:{fontSize:13,color:t.tm}},p+"%")),
+            h(PBar,{percent:p,t}),
+            h("div",{style:{marginTop:14}},skill.items.map(item=>h(ExpandableSkill,{key:item.id,item,cat:cat.key,t,apiKey,editMode:em,editingSkill:es,onEdit:id=>setEs(id===undefined?item.id:id),onRename:v=>renGS(cat.key,item.id,v),onDelete:()=>delGS(cat.key,item.id),onStage:v=>upGen(cat.key,item.id,v),onUpdateResources:r=>upGSR(cat.key,item.id,r)}))),
+            em&&h("div",{style:{display:"flex",gap:8,marginTop:10}},h(Inp,{value:ns[cat.key]||"",onChange:v=>setNs(p=>({...p,[cat.key]:v})),placeholder:"Add skill...",t,style:{flex:1}}),h("button",{onClick:()=>{if(ns[cat.key]?.trim()){addGS(cat.key,ns[cat.key].trim());setNs(p=>({...p,[cat.key]:""}));}},style:{padding:"8px 14px",borderRadius:8,border:`2px dashed ${t.ac}`,background:"transparent",color:t.ac,cursor:"pointer",fontSize:12,fontWeight:700}},"+ Add")))}),
+        h(SugPanel,{type:"general",allData:data,t,apiKey,onSave:s=>setData(p=>{const d=JSON.parse(JSON.stringify(p));d.generalRoadmap.suggestions=s;return d})})),SM)}
+
+  // Dashboard
+  const allI=[...data.generalRoadmap.skills.reading.items,...data.generalRoadmap.skills.technique.items,...data.generalRoadmap.skills.theory.items];
+  const gp=cp(allI),levels=["Beginner","Intermediate","Master"],ci=levels.indexOf(data.generalRoadmap.level);
+  return h("div",{style:{minHeight:"100vh",background:t.bg}},h(TopBar,{theme,toggleTheme:toggle,t,onSettings:()=>setShowSet(true),syncStatus}),
+    h("div",{style:{maxWidth:800,margin:"0 auto",padding:"24px 20px"}},
+      h("div",{className:"fi",style:{background:t.bb,borderRadius:10,padding:"16px 20px",marginBottom:24}},h("div",{style:{fontFamily:FD,fontSize:18,fontWeight:700,color:t.tx,marginBottom:4}},"Welcome back to your piano journey"),h("div",{style:{fontSize:12,color:t.ts}},`${data.songs.length} song${data.songs.length!==1?"s":""} · ${data.generalRoadmap.level}`)),
+      h("div",{className:"su",style:{marginBottom:32}},h("div",{style:{fontSize:12,fontWeight:700,color:t.ac,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}},"General Roadmap"),
+        h("div",{onClick:()=>setSel({type:"general"}),style:{background:t.cb,borderRadius:12,border:`1px solid ${t.cbd}`,padding:20,boxShadow:t.sh,cursor:"pointer",display:"flex",alignItems:"center",gap:16,transition:"box-shadow .2s,transform .2s"},onMouseEnter:e=>{e.currentTarget.style.boxShadow=t.shh;e.currentTarget.style.transform="translateY(-1px)"},onMouseLeave:e=>{e.currentTarget.style.boxShadow=t.sh;e.currentTarget.style.transform="translateY(0)"}},
+          h("div",{style:{position:"relative",width:68,height:68,flexShrink:0}},h(PRing,{percent:gp,size:68,stroke:6,color:t.ac,trackColor:t.trk}),h("div",{style:{position:"absolute",top:0,left:0,width:68,height:68,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:t.tx}},gp+"%")),
+          h("div",{style:{flex:1,minWidth:0}},h("div",{style:{fontFamily:FD,fontSize:17,fontWeight:700,color:t.tx,marginBottom:6}},"Your Foundation"),h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},h("span",{style:{background:t.al,color:t.ac,fontSize:11,fontWeight:700,padding:"3px 12px",borderRadius:12}},data.generalRoadmap.level),levels.slice(ci+1).map(l=>h("span",{key:l,style:{fontSize:11,color:t.fl}},"→ "+l))),h("div",{style:{marginTop:12}},h(PBar,{percent:gp,t}))),
+          h("div",{style:{fontSize:22,color:t.go,flexShrink:0}},"→"))),
+      h("div",{className:"su",style:{animationDelay:".1s"}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},h("div",{style:{fontSize:12,fontWeight:700,color:t.ac,letterSpacing:1.5,textTransform:"uppercase"}},`Songs (${data.songs.length})`),
+          h("div",{style:{display:"flex",gap:4}},[{m:"cards",n:4},{m:"list",n:2}].map(v=>h("button",{key:v.m,onClick:()=>setVm(v.m),style:{width:28,height:24,borderRadius:4,border:"none",cursor:"pointer",background:vm===v.m?t.ac:t.trk,display:"flex",alignItems:"center",justifyContent:"center",gap:v.m==="cards"?2:3,flexWrap:v.m==="cards"?"wrap":"nowrap",flexDirection:v.m==="list"?"column":"row",padding:4}},Array.from({length:v.n}).map((_,i)=>h("div",{key:i,style:{width:v.m==="cards"?6:16,height:v.m==="cards"?5:3,borderRadius:1,background:vm===v.m?"#fff":t.tm}})))))),
+        h("div",{className:"sfr",style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}},h("input",{className:"si-full",value:search,onChange:e=>setSearch(e.target.value),placeholder:"🔍 Search...",style:{padding:"10px 14px",borderRadius:8,border:`1px solid ${t.cbd}`,background:t.ib,color:t.tx,fontSize:13,outline:"none",width:200}}),h("div",{className:"ps"},["All","Classical","Film","Modern","Existing","New"].map(p=>h("button",{key:p,onClick:()=>setFilter(p),style:{padding:"7px 14px",borderRadius:16,fontSize:11,fontWeight:600,border:filter===p?"none":`1px solid ${t.pbd}`,background:filter===p?t.pab:t.pb,color:filter===p?t.pat:t.ts,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}},p)))),
+        vm==="cards"?h("div",{className:"dg",style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}},filtered.map((s,i)=>{const stc=gc(sst(s),t),p=sp(s);return h("div",{key:s.id,className:"fi",style:{animationDelay:`${i*.04}s`},onClick:()=>setSel({type:"song",id:s.id})},h("div",{style:{background:t.cb,borderRadius:10,border:`1px solid ${t.cbd}`,padding:16,boxShadow:t.sh,cursor:"pointer",transition:"box-shadow .2s,transform .2s"},onMouseEnter:e=>{e.currentTarget.style.boxShadow=t.shh;e.currentTarget.style.transform="translateY(-2px)"},onMouseLeave:e=>{e.currentTarget.style.boxShadow=t.sh;e.currentTarget.style.transform="translateY(0)"}},h("div",{style:{fontFamily:FD,fontSize:15,fontWeight:700,color:t.tx,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},s.name),h("div",{style:{fontSize:11,color:t.ts,marginBottom:6}},`${s.genre} · ${s.type}`),h(SkillTags,{tags:s.skillTags?.slice(0,3),t}),h("div",{style:{display:"flex",alignItems:"center",gap:8,margin:"8px 0"}},h(PBar,{percent:p,t,height:5}),h("span",{style:{fontSize:10,color:t.tm}},p+"%")),h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},h("span",{style:{background:stc.b,color:stc.t,fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:4}},sst(s)),s.youtubeTimestamp&&h("span",{style:{fontSize:10,color:t.tm}},"▶ "+s.youtubeTimestamp))))}),h("div",{onClick:()=>setShowWiz(true),style:{borderRadius:10,border:`2px dashed ${t.ac}`,padding:16,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",minHeight:120,background:"transparent"},onMouseEnter:e=>e.currentTarget.style.background=t.al,onMouseLeave:e=>e.currentTarget.style.background="transparent"},h("div",{style:{fontSize:28,color:t.ac,marginBottom:4}},"+"),h("div",{style:{fontSize:13,color:t.ac,fontWeight:600}},"Add Song"))):
+        h("div",{style:{borderRadius:10,border:`1px solid ${t.cbd}`,overflow:"hidden"}},h("div",{className:"lh",style:{display:"grid",gridTemplateColumns:"2fr 1fr .8fr 1.5fr .8fr",padding:"10px 16px",background:t.bb}},["Name","Genre","Type","Progress","Stage"].map(x=>h("div",{key:x,style:{fontSize:10,fontWeight:700,color:t.tm,textTransform:"uppercase"}},x))),filtered.map((s,i)=>{const stc=gc(sst(s),t),p=sp(s);return h("div",{key:s.id,className:"lr",onClick:()=>setSel({type:"song",id:s.id}),style:{display:"grid",gridTemplateColumns:"2fr 1fr .8fr 1.5fr .8fr",alignItems:"center",padding:"12px 16px",background:i%2?t.ra:t.cb,borderBottom:`1px solid ${t.dv}`,cursor:"pointer"},onMouseEnter:e=>e.currentTarget.style.background=t.bb,onMouseLeave:e=>e.currentTarget.style.background=i%2?t.ra:t.cb},h("div",{style:{fontFamily:FD,fontSize:14,fontWeight:700,color:t.tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},s.name),h("div",{style:{fontSize:12,color:t.ts}},s.genre),h("div",{style:{fontSize:12,color:t.ts}},s.type),h("div",{style:{display:"flex",alignItems:"center",gap:8}},h(PBar,{percent:p,t,height:5}),h("span",{style:{fontSize:10,color:t.tm}},p+"%")),h("span",{style:{background:stc.b,color:stc.t,fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:4}},sst(s)))}),h("div",{onClick:()=>setShowWiz(true),style:{padding:"14px 16px",textAlign:"center",cursor:"pointer",borderTop:`1px dashed ${t.ac}`,color:t.ac,fontSize:13,fontWeight:600},onMouseEnter:e=>e.currentTarget.style.background=t.al,onMouseLeave:e=>e.currentTarget.style.background="transparent"},"+ Add Song")),
+        filtered.length===0&&data.songs.length>0&&h("div",{style:{textAlign:"center",padding:32,color:t.tm,fontSize:14}},"No matches."),
+        data.songs.length===0&&h("div",{className:"fi",style:{textAlign:"center",padding:40,color:t.ts}},h("div",{style:{fontSize:32,marginBottom:8}},"🎹"),h("div",{style:{fontSize:15,fontWeight:600,marginBottom:4}},"No songs yet"),h("div",{style:{fontSize:13}},"Add your first song!")))),
+    showWiz&&h(Wizard,{t,apiKey,onSave:addSong,onCancel:()=>setShowWiz(false)}),SM)}
+
+ReactDOM.render(h(App),document.getElementById("root"));
+</script>
+</body>
+</html>
