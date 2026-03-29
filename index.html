@@ -296,9 +296,9 @@ function App(){
   // Firebase auth listener
   useEffect(()=>{
     const unsub=auth.onAuthStateChanged(user=>{
-      if(user){
+      if(user&&!user.isAnonymous){
+        // Google user — auto-enter
         fbUid=user.uid;setFbUser(user);setFbReady(true);
-        // Load from Firebase
         const ref=getDocRef();
         if(ref){
           ref.get().then(doc=>{
@@ -308,7 +308,6 @@ function App(){
               ref.set({data:JSON.stringify(data),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});setSyncStatus("synced");
             }
           }).catch(()=>setSyncStatus("offline"));
-          // Real-time listener
           ref.onSnapshot(doc=>{
             if(doc.exists&&!skipNextSync.current){
               try{const fbData=JSON.parse(doc.data().data);setData(fbData);localStorage.setItem("pj",JSON.stringify(fbData))}catch{}
@@ -316,6 +315,9 @@ function App(){
             skipNextSync.current=false;
           },()=>setSyncStatus("offline"));
         }
+      }else if(user&&user.isAnonymous){
+        // Old anonymous session — sign out and show login screen
+        auth.signOut();
       }else{
         fbUid=null;setFbUser(null);setFbReady(false);setSyncStatus("signed-out");
       }
